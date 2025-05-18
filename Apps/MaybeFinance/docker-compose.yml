@@ -3,6 +3,47 @@
 # Name of the big-bear-maybe-finance application
 name: big-bear-maybe-finance
 
+# Postgres environment variables
+x-db-env: &db_env
+  # Name of the database to create
+  POSTGRES_DB: maybe_production
+
+  # PostgreSQL user
+  POSTGRES_USER: maybe_user
+
+  # Password for the PostgreSQL user
+  POSTGRES_PASSWORD: casaos
+
+# Rails app environment variables
+x-rails-env: &rails_env
+  <<: *db_env
+
+  # Indicates the application is self-hosted
+  SELF_HOSTED: "true"
+
+  # SSL configuration
+  RAILS_FORCE_SSL: "false"
+
+  # SSL assumption configuration
+  RAILS_ASSUME_SSL: "false"
+
+  # Sets the execution mode for GoodJob
+  GOOD_JOB_EXECUTION_MODE: async
+
+  # Secret key for Rails application
+  SECRET_KEY_BASE: SECRET_KEY_BASE
+  
+  # Hostname for the PostgreSQL database service
+  DB_HOST: big-bear-maybe-finance-postgres
+
+  # Redis URL
+  REDIS_URL: redis://redis:6379/1
+
+  # OpenAI API access token
+  # NOTE: enabling OpenAI will incur costs when you use AI-related features in the app (chat, rules).
+  # Make sure you have set appropriate spend limits on your account before adding this.
+  OPENAI_ACCESS_TOKEN: ""
+
 # Service definitions for the big-bear-maybe-finance application
 services:
   # Service name: app
@@ -44,7 +85,7 @@ services:
       big-bear-maybe-finance-postgres:
         # Ensures that the `app` service starts only after `postgres` is healthy
         condition: service_healthy
-      big-bear-maybe-finance-redids:
+      big-bear-maybe-finance-redis:
         # Ensures that the `app` service starts only after `redis` is healthy
         condition: service_healthy
     
@@ -264,47 +305,6 @@ networks:
   big_bear_maybe_finance_network:
     # Custom name for the default network
     name: big_bear_maybe_finance_network
-
-# Postgres environment variables
-x-db-env: &db_env
-  # Name of the database to create
-  POSTGRES_DB: maybe_production
-
-  # PostgreSQL user
-  POSTGRES_USER: maybe_user
-
-  # Password for the PostgreSQL user
-  POSTGRES_PASSWORD: casaos
-
-# Rails app environment variables
-x-rails-env: &rails_env
-  <<: &db_env
-
-  # Indicates the application is self-hosted
-  SELF_HOSTED: "true"
-
-  # SSL configuration
-  RAILS_FORCE_SSL: "false"
-
-  # SSL assumption configuration
-  RAILS_ASSUME_SSL: "false"
-
-  # Sets the execution mode for GoodJob
-  GOOD_JOB_EXECUTION_MODE: async
-
-  # Secret key for Rails application
-  SECRET_KEY_BASE: SECRET_KEY_BASE
-  
-  # Hostname for the PostgreSQL database service
-  DB_HOST: big-bear-maybe-finance-postgres
-
-  # Redis URL
-  REDIS_URL: redis://redis:6379/1
-
-  # OpenAI API access token
-  # NOTE: enabling OpenAI will incur costs when you use AI-related features in the app (chat, rules).
-  # Make sure you have set appropriate spend limits on your account before adding this.
-  OPENAI_ACCESS_TOKEN: ""
 
 # CasaOS specific configuration
 x-casaos:
