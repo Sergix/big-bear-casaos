@@ -12,7 +12,7 @@ services:
     container_name: big-bear-maybe-finance
 
     # Image to be used for the container
-    image: ghcr.io/maybe-finance/maybe:sha-9522a191de1f258d76ed996ba1c84e3a0629dd80
+    image: ghcr.io/maybe-finance/maybe:sha-9fa3698823476a5b1773176ed67bb3d327d1dc05
 
     # Container restart policy
     restart: unless-stopped
@@ -37,37 +37,15 @@ services:
     
     # Environment variables
     environment:
-      # Indicates the application is self-hosted
-      SELF_HOSTED: "true"
-
-      # SSL configuration
-      RAILS_FORCE_SSL: "false"
-
-      # SSL assumption configuration
-      RAILS_ASSUME_SSL: "false"
-
-      # Sets the execution mode for GoodJob
-      GOOD_JOB_EXECUTION_MODE: async
-
-      # Secret key for Rails application
-      SECRET_KEY_BASE: SECRET_KEY_BASE
-      
-      # Hostname for the PostgreSQL database service
-      DB_HOST: big-bear-maybe-finance-postgres
-
-      # Name of the PostgreSQL database
-      POSTGRES_DB: maybe_production
-
-      # PostgreSQL user
-      POSTGRES_USER: maybe_user
-
-      # Password for the PostgreSQL user
-      POSTGRES_PASSWORD: casaos
+      <<: *rails_env
     
     # This section specifies that the `app` service depends on another service named `postgres`.
     depends_on:
       big-bear-maybe-finance-postgres:
         # Ensures that the `app` service starts only after `postgres` is healthy
+        condition: service_healthy
+      big-bear-maybe-finance-redids:
+        # Ensures that the `app` service starts only after `redis` is healthy
         condition: service_healthy
     
     # CasaOS specific configuration
@@ -98,11 +76,6 @@ services:
           description:
             en_us: "Determines if SSL should be forced (true/false)."
 
-        # Execution mode for GoodJob background processing
-        - container: GOOD_JOB_EXECUTION_MODE
-          description:
-            en_us: "Sets the execution mode for GoodJob (e.g., async)."
-
         # Security key for the Rails application
         - container: SECRET_KEY_BASE
           description:
@@ -128,6 +101,16 @@ services:
           description:
             en_us: "Password for the PostgreSQL user."
 
+        # Hostname of the Rails service
+        - container: REDIS_URL
+          description: 
+            en_us: "Hostname of the Rails service"
+
+        # OpenAI API key
+        - container: OPENAI_ACCESS_TOKEN
+          description:
+            en_us: "OpenAI API access token. NOTE: enabling OpenAI will incur costs when you use AI-related features in the app (chat, rules). Make sure you have set appropriate spend limits on your account before adding this."
+
   # Service name: big-bear-maybe-finance-postgres
   # The `big-bear-maybe-finance-postgres` service definition
   big-bear-maybe-finance-postgres:
@@ -147,14 +130,7 @@ services:
 
     # Environment variables
     environment:
-      # Name of the database to create
-      POSTGRES_DB: maybe_production
-
-      # PostgreSQL user
-      POSTGRES_USER: maybe_user
-
-      # Password for the PostgreSQL user
-      POSTGRES_PASSWORD: casaos
+      <<: *db_env
 
     # Health check configuration for the PostgreSQL service
     healthcheck:
@@ -199,11 +175,136 @@ services:
           description:
             en_us: "Password for the PostgreSQL user."
 
+  # Service name: big-bear-maybe-finance-worker
+  # The `big-bear-maybe-finance-worker` service definition
+  big-bear-maybe-finance-worker:
+    # Name of the container
+    container_name: big-bear-maybe-finance-worker
+
+    # Image to be used for the container
+    image: ghcr.io/maybe-finance/maybe:sha-9fa3698823476a5b1773176ed67bb3d327d1dc05
+
+    # Container restart policy
+    restart: unless-stopped
+
+    # Command to start the sidekiq worker
+    command: bundle exec sidekiq
+
+    # This section specifies that the `redis` service depends on another service named `postgres`.
+    depends_on:
+      big-bear-maybe-finance-redis:
+        # Ensures that the `app` service starts only after `redis` is healthy
+        condition: service_healthy
+
+    # Environment variables
+    environment:
+      <<: *rails_env
+
+    # Network configuration for the PostgreSQL service
+    networks:
+      # Use the default Docker network
+      - big_bear_maybe_finance_network
+
+  # Service name: big-bear-maybe-finance-redis
+  # The `big-bear-maybe-finance-redis` service definition
+  big-bear-maybe-finance-redis:
+    # Name of the container
+    container_name: big-bear-maybe-finance-redis
+
+    # Image to be used for the container
+    image: redis:latest
+
+    # Container restart policy
+    restart: unless-stopped
+
+    # Environment variables
+    environment:
+      <<: *rails_env
+
+    # Volumes to be mounted to the container
+    volumes:
+      # Mounting the local maybe/redis-data directory to /var/lib/redis/data inside the container
+      - /DATA/AppData/$AppID/redis-data:/var/lib/redis/data
+
+    # Network configuration for the PostgreSQL service
+    networks:
+      # Use the default Docker network
+      - big_bear_maybe_finance_network
+
+    # Health check configuration for the PostgreSQL service
+    healthcheck:
+      # Command to check if PostgreSQL is ready
+      test: [ "CMD", "redis-cli", "ping" ]
+
+      # Interval between health checks
+      interval: 5s
+
+      # Timeout for the health check command
+      timeout: 5s
+
+      # Number of retries before considering the service unhealthy
+      retries: 5
+    
+    # CasaOS specific configuration
+    x-casaos:
+      # Volume definitions for the application
+      volumes:
+        # Path in the container for application storage
+        - container: /var/lib/redis/data
+          description:
+            en_us: "Container Path: /var/lib/redis/data"
+      envs:
+        # Hostname of the Rails service
+        - container: REDIS_URL
+          description: 
+            en_us: "Hostname of the Rails service"
+
 # Definition of networks used in the services
 networks:
   big_bear_maybe_finance_network:
     # Custom name for the default network
     name: big_bear_maybe_finance_network
+
+# Postgres environment variables
+x-db-env: &db_env
+  # Name of the database to create
+  POSTGRES_DB: maybe_production
+
+  # PostgreSQL user
+  POSTGRES_USER: maybe_user
+
+  # Password for the PostgreSQL user
+  POSTGRES_PASSWORD: casaos
+
+# Rails app environment variables
+x-rails-env: &rails_env
+  <<: &db_env
+
+  # Indicates the application is self-hosted
+  SELF_HOSTED: "true"
+
+  # SSL configuration
+  RAILS_FORCE_SSL: "false"
+
+  # SSL assumption configuration
+  RAILS_ASSUME_SSL: "false"
+
+  # Sets the execution mode for GoodJob
+  GOOD_JOB_EXECUTION_MODE: async
+
+  # Secret key for Rails application
+  SECRET_KEY_BASE: SECRET_KEY_BASE
+  
+  # Hostname for the PostgreSQL database service
+  DB_HOST: big-bear-maybe-finance-postgres
+
+  # Redis URL
+  REDIS_URL: redis://redis:6379/1
+
+  # OpenAI API access token
+  # NOTE: enabling OpenAI will incur costs when you use AI-related features in the app (chat, rules).
+  # Make sure you have set appropriate spend limits on your account before adding this.
+  OPENAI_ACCESS_TOKEN: ""
 
 # CasaOS specific configuration
 x-casaos:
